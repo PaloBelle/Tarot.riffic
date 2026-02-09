@@ -48,11 +48,11 @@ export default function TransitsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Moon className="w-5 h-5 text-primary" />
-                    Your Birth Chart (Tropical Astrology - Placidus System)
+                    Your Birth Chart
                   </CardTitle>
                   <CardDescription>Personal astrological information</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
+                <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Name</p>
@@ -84,74 +84,10 @@ export default function TransitsPage() {
                       <p className="text-lg font-semibold text-foreground">{birthChartData.birthTime}</p>
                     </div>
                     <div className="md:col-span-2">
-                      <p className="text-sm text-muted-foreground">Birth Place & Coordinates</p>
+                      <p className="text-sm text-muted-foreground">Birth Place</p>
                       <p className="text-lg font-semibold text-foreground">{birthChartData.birthPlace}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {birthChartData.latitude.toFixed(4)}°, {birthChartData.longitude.toFixed(4)}°
-                      </p>
                     </div>
                   </div>
-
-                  {/* Placidus House System */}
-                  {birthChartData.placidusChart && (
-                    <div className="border-t border-primary/20 pt-6">
-                      <h3 className="text-lg font-semibold text-foreground mb-4">Placidus House System</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="p-3 rounded-lg bg-accent/10 border border-accent/20">
-                          <p className="text-sm text-muted-foreground">Ascendant (Rising Sign)</p>
-                          <p className="text-2xl font-bold text-accent">
-                            {birthChartData.placidusChart.ascendant.signSymbol}
-                          </p>
-                          <p className="text-foreground font-semibold">
-                            {birthChartData.placidusChart.ascendant.sign}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {birthChartData.placidusChart.ascendant.degree.toFixed(2)}°
-                          </p>
-                        </div>
-
-                        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-                          <p className="text-sm text-muted-foreground">Midheaven (MC)</p>
-                          <p className="text-2xl font-bold text-primary">
-                            {birthChartData.placidusChart.midheaven.signSymbol}
-                          </p>
-                          <p className="text-foreground font-semibold">
-                            {birthChartData.placidusChart.midheaven.sign}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {birthChartData.placidusChart.midheaven.degree.toFixed(2)}°
-                          </p>
-                        </div>
-
-                        <div className="p-3 rounded-lg bg-muted/50 border border-muted-foreground/20">
-                          <p className="text-sm text-muted-foreground">Imum Coeli (IC)</p>
-                          <p className="text-2xl font-bold text-muted-foreground">
-                            {
-                              birthChartData.placidusChart.houses.find((h) => h.house === 4)
-                                ?.signSymbol
-                            }
-                          </p>
-                          <p className="text-foreground font-semibold">
-                            {
-                              birthChartData.placidusChart.houses.find((h) => h.house === 4)
-                                ?.sign
-                            }
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* All 12 Houses */}
-                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {birthChartData.placidusChart.houses.map((house) => (
-                          <div key={house.house} className="p-2 rounded bg-card border border-primary/10 text-center">
-                            <p className="text-xs text-muted-foreground font-semibold">House {house.house}</p>
-                            <p className="text-sm font-bold text-foreground">{house.sign}</p>
-                            <p className="text-xs text-muted-foreground">{house.degree.toFixed(1)}°</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 

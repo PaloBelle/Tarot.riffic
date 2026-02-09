@@ -67,10 +67,16 @@ export default function HomePage() {
                     <Sparkles className="w-4 h-4 mr-2" />
                     Draw Cards
                   </Button>
-                  <Link href="/birth-chart">
+                  <Link href="/chart">
                     <Button size="lg" variant="outline">
                       <Moon className="w-4 h-4 mr-2" />
-                      Enter Birth Chart
+                      View Birth Chart
+                    </Button>
+                  </Link>
+                  <Link href="/birth-chart">
+                    <Button size="lg" variant="outline">
+                      <Star className="w-4 h-4 mr-2" />
+                      Create Birth Chart
                     </Button>
                   </Link>
                 </div>

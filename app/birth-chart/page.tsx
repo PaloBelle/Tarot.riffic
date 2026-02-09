@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Moon, Star, ArrowLeft, MapPin, Loader } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { calculateBirthChart } from "@/lib/astrology-calculator"
 
 function convertToDecimal(degrees: number, minutes = 0, seconds = 0, isWest = false): number {
   const decimal = degrees + minutes / 60 + seconds / 3600
@@ -115,36 +116,30 @@ export default function BirthChartPage() {
     }
 
     if (!formData.birthTime) {
-      setError("Birth time is required for accurate Placidus house calculations")
+      setError("Birth time is required for accurate house placements")
       return
     }
 
-    // Import Placidus calculation functions
-    const { calculateJulianDayNumber, calculateGreenwichSiderealTime, calculateLocalSiderealTime, calculateAscendant, calculateMidheaven, calculatePlacidusHouses } = require("@/lib/astrology-data")
-
     try {
-      const jd = calculateJulianDayNumber(new Date(formData.birthDate), formData.birthTime)
-      const gst = calculateGreenwichSiderealTime(jd)
-      const lst = calculateLocalSiderealTime(gst, coordinates.decimalLon)
-
-      const ascendant = calculateAscendant(coordinates.decimalLat, lst)
-      const midheaven = calculateMidheaven(lst)
-      const placidusChart = calculatePlacidusHouses(coordinates.decimalLat, ascendant, midheaven)
-
-      // Store birth chart data with Placidus house system
-      localStorage.setItem(
-        "birthChartData",
-        JSON.stringify({
-          ...formData,
-          latitude: coordinates.decimalLat,
-          longitude: coordinates.decimalLon,
-          placidusChart: placidusChart,
-        }),
+      // Calculate accurate birth chart with tropical astrology and Placidus system
+      const birthChart = calculateBirthChart(
+        formData.name,
+        formData.birthDate,
+        formData.birthTime,
+        formData.birthPlace,
+        coordinates.decimalLat,
+        coordinates.decimalLon,
       )
+
+      // Clear all previous birth chart data and store new calculation
+      localStorage.clear()
+      localStorage.setItem("birthChart", JSON.stringify(birthChart))
+
+      console.log("[v0] Birth chart calculated:", birthChart)
       router.push("/")
     } catch (err) {
-      console.error("[v0] Placidus calculation error:", err)
-      setError("Error calculating Placidus houses. Please verify your birth information.")
+      console.error("[v0] Birth chart calculation error:", err)
+      setError("Error calculating birth chart. Please verify your birth information.")
     }
   }
 
