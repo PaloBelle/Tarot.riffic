@@ -114,16 +114,38 @@ export default function BirthChartPage() {
       return
     }
 
-    // Store birth chart data with automatic coordinates (decimal format for calculations)
-    localStorage.setItem(
-      "birthChartData",
-      JSON.stringify({
-        ...formData,
-        latitude: coordinates.decimalLat,
-        longitude: coordinates.decimalLon,
-      }),
-    )
-    router.push("/")
+    if (!formData.birthTime) {
+      setError("Birth time is required for accurate Placidus house calculations")
+      return
+    }
+
+    // Import Placidus calculation functions
+    const { calculateJulianDayNumber, calculateGreenwichSiderealTime, calculateLocalSiderealTime, calculateAscendant, calculateMidheaven, calculatePlacidusHouses } = require("@/lib/astrology-data")
+
+    try {
+      const jd = calculateJulianDayNumber(new Date(formData.birthDate), formData.birthTime)
+      const gst = calculateGreenwichSiderealTime(jd)
+      const lst = calculateLocalSiderealTime(gst, coordinates.decimalLon)
+
+      const ascendant = calculateAscendant(coordinates.decimalLat, lst)
+      const midheaven = calculateMidheaven(lst)
+      const placidusChart = calculatePlacidusHouses(coordinates.decimalLat, ascendant, midheaven)
+
+      // Store birth chart data with Placidus house system
+      localStorage.setItem(
+        "birthChartData",
+        JSON.stringify({
+          ...formData,
+          latitude: coordinates.decimalLat,
+          longitude: coordinates.decimalLon,
+          placidusChart: placidusChart,
+        }),
+      )
+      router.push("/")
+    } catch (err) {
+      console.error("[v0] Placidus calculation error:", err)
+      setError("Error calculating Placidus houses. Please verify your birth information.")
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

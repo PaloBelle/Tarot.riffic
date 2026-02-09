@@ -4,6 +4,16 @@ export interface BirthChart {
   location: string
   latitude?: number
   longitude?: number
+  placidusChart?: {
+    ascendant: { degree: number; sign: string; signSymbol: string }
+    midheaven: { degree: number; sign: string; signSymbol: string }
+    houses: Array<{
+      house: number
+      degree: number
+      sign: string
+      signSymbol: string
+    }>
+  }
 }
 
 export interface PlanetPosition {

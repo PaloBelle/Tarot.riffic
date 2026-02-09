@@ -3,8 +3,21 @@ export interface BirthChartData {
   birthDate: string
   birthTime: string
   birthPlace: string
-  latitude: string
-  longitude: string
+  latitude: number
+  longitude: number
+}
+
+export interface HouseCusp {
+  house: number
+  degree: number
+  sign: string
+  signSymbol: string
+}
+
+export interface PlacidusChart {
+  ascendant: { degree: number; sign: string; signSymbol: string }
+  midheaven: { degree: number; sign: string; signSymbol: string }
+  houses: HouseCusp[]
 }
 
 export interface ZodiacSign {
@@ -303,6 +316,223 @@ function getCurrentMoonSignTropical(date: Date): string {
   const signIndex = Math.floor((moonCycle / 29.5) * 12) % 12
 
   return zodiacOrder[signIndex]
+}
+
+// Placidus House System Calculations
+// This implements the Placidus method which divides time quadrants proportionally
+
+export function calculateJulianDayNumber(date: Date, time: string): number {
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+
+  const [hours, minutes] = time.split(":").map(Number)
+  const seconds = 0
+  const ut = hours + minutes / 60 + seconds / 3600
+
+  let a = Math.floor((14 - month) / 12)
+  let y = year + 4800 - a
+  let m = month + 12 * a - 3
+
+  const jdn = day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045
+
+  return jdn + (ut - 12) / 24
+}
+
+export function calculateGreenwichSiderealTime(jd: number): number {
+  const t = (jd - 2451545.0) / 36525.0
+  const gmst = 280.46061837 + 360.98564724 * jd + 0.000387933 * t * t - t * t * t / 38710000.0
+
+  return ((gmst % 360) + 360) % 360
+}
+
+export function calculateLocalSiderealTime(gst: number, longitude: number): number {
+  const lst = gst + longitude
+  return ((lst % 360) + 360) % 360
+}
+
+export function degreesToDecimal(degree: number, minute: number, second: number): number {
+  return degree + minute / 60 + second / 3600
+}
+
+export function decimalToDMS(decimal: number): { degree: number; minute: number; second: number } {
+  const degree = Math.floor(decimal)
+  const minuteDecimal = (decimal - degree) * 60
+  const minute = Math.floor(minuteDecimal)
+  const second = Math.round((minuteDecimal - minute) * 60 * 100) / 100
+
+  return { degree, minute, second }
+}
+
+export function calculateAscendant(latitude: number, lstDegrees: number): number {
+  const lat = (latitude * Math.PI) / 180
+  const lst = (lstDegrees * Math.PI) / 180
+
+  const tanAsc = -Math.cos(lst) / (Math.sin(lst) * Math.cos(lat) + Math.tan(0) * Math.sin(lat))
+  let ascendant = Math.atan(tanAsc) * (180 / Math.PI)
+
+  // Quadrant correction
+  if (Math.cos(lst) > 0) {
+    ascendant += 180
+  }
+
+  return ((ascendant % 360) + 360) % 360
+}
+
+export function calculateMidheaven(lstDegrees: number): number {
+  const lst = (lstDegrees * Math.PI) / 180
+  const mc = Math.atan(Math.tan(lst)) * (180 / Math.PI)
+
+  let midheaven = mc + 90
+  if (midheaven < 0) {
+    midheaven += 360
+  }
+
+  return ((midheaven % 360) + 360) % 360
+}
+
+export function calculatePlacidusHouses(
+  latitude: number,
+  ascendant: number,
+  midheaven: number,
+): PlacidusChart {
+  const lat = (latitude * Math.PI) / 180
+  const asc = (ascendant * Math.PI) / 180
+  const mc = (midheaven * Math.PI) / 180
+
+  // Calculate Imum Coeli (IC) - opposite of MC
+  const ic = mc + Math.PI
+  const ic_deg = (((ic * 180) / Math.PI) % 360 + 360) % 360
+
+  const houses: HouseCusp[] = []
+
+  // House 1 (Ascendant)
+  houses.push({
+    house: 1,
+    degree: ascendant,
+    sign: getSignFromDegree(ascendant),
+    signSymbol: zodiacSigns[getSignKeyFromDegree(ascendant)].symbol,
+  })
+
+  // House 10 (Midheaven)
+  houses.push({
+    house: 10,
+    degree: midheaven,
+    sign: getSignFromDegree(midheaven),
+    signSymbol: zodiacSigns[getSignKeyFromDegree(midheaven)].symbol,
+  })
+
+  // House 7 (Descendant - opposite of Ascendant)
+  const descendant = (ascendant + 180) % 360
+  houses.push({
+    house: 7,
+    degree: descendant,
+    sign: getSignFromDegree(descendant),
+    signSymbol: zodiacSigns[getSignKeyFromDegree(descendant)].symbol,
+  })
+
+  // House 4 (IC - opposite of MC)
+  houses.push({
+    house: 4,
+    degree: ic_deg,
+    sign: getSignFromDegree(ic_deg),
+    signSymbol: zodiacSigns[getSignKeyFromDegree(ic_deg)].symbol,
+  })
+
+  // Calculate intermediate houses (2, 3, 5, 6, 8, 9, 11, 12)
+  // Simplified Placidus calculation
+  const placidusHouses = [
+    { house: 2, fraction: 1 / 3 },
+    { house: 3, fraction: 2 / 3 },
+    { house: 5, fraction: 1 / 3, from: "mc" },
+    { house: 6, fraction: 2 / 3, from: "mc" },
+    { house: 8, fraction: 1 / 3, from: "ic" },
+    { house: 9, fraction: 2 / 3, from: "ic" },
+    { house: 11, fraction: 1 / 3, from: "desc" },
+    { house: 12, fraction: 2 / 3, from: "desc" },
+  ]
+
+  placidusHouses.forEach(({ house, fraction, from }) => {
+    let baseDegree = ascendant
+    let oppositeDegree = descendant
+
+    if (from === "mc") {
+      baseDegree = midheaven
+      oppositeDegree = ic_deg
+    } else if (from === "ic") {
+      baseDegree = ic_deg
+      oppositeDegree = midheaven
+    } else if (from === "desc") {
+      baseDegree = descendant
+      oppositeDegree = ascendant
+    }
+
+    let houseDegree = baseDegree + (oppositeDegree - baseDegree) * fraction
+    if (houseDegree < 0) houseDegree += 360
+    houseDegree = houseDegree % 360
+
+    houses.push({
+      house,
+      degree: houseDegree,
+      sign: getSignFromDegree(houseDegree),
+      signSymbol: zodiacSigns[getSignKeyFromDegree(houseDegree)].symbol,
+    })
+  })
+
+  // Sort houses by house number
+  houses.sort((a, b) => a.house - b.house)
+
+  return {
+    ascendant: {
+      degree: ascendant,
+      sign: getSignFromDegree(ascendant),
+      signSymbol: zodiacSigns[getSignKeyFromDegree(ascendant)].symbol,
+    },
+    midheaven: {
+      degree: midheaven,
+      sign: getSignFromDegree(midheaven),
+      signSymbol: zodiacSigns[getSignKeyFromDegree(midheaven)].symbol,
+    },
+    houses,
+  }
+}
+
+function getSignKeyFromDegree(degree: number): string {
+  const normalizedDegree = degree % 360
+  for (const [sign, range] of Object.entries(zodiacDegrees)) {
+    if (normalizedDegree >= range.start && normalizedDegree < range.end) {
+      return sign
+    }
+  }
+  return "aries"
+}
+
+export function calculatePlanetHouses(planetDegree: number, houses: HouseCusp[]): number {
+  let assignedHouse = 1
+
+  for (let i = 0; i < houses.length; i++) {
+    const currentHouse = houses[i]
+    const nextHouse = houses[(i + 1) % houses.length]
+
+    let inHouse = false
+    if (nextHouse.house > currentHouse.house || (nextHouse.house === 1 && currentHouse.house > 6)) {
+      // Normal progression
+      if (planetDegree >= currentHouse.degree && planetDegree < nextHouse.degree) {
+        inHouse = true
+        assignedHouse = currentHouse.house
+      }
+    } else {
+      // Wrapping around 360
+      if (planetDegree >= currentHouse.degree || planetDegree < nextHouse.degree) {
+        inHouse = true
+        assignedHouse = currentHouse.house
+      }
+    }
+
+    if (inHouse) break
+  }
+
+  return assignedHouse
 }
 
 export function getCurrentTransits(birthChartData: BirthChartData): PlanetaryTransit[] {
