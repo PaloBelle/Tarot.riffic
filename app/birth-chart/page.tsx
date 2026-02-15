@@ -7,9 +7,46 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Moon, Star, ArrowLeft } from "lucide-react"
+import { Moon, Star, ArrowLeft, MapPin, Loader } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { calculateBirthChart } from "@/lib/astrology-calculator"
+
+function convertToDecimal(degrees: number, minutes = 0, seconds = 0, isWest = false): number {
+  const decimal = degrees + minutes / 60 + seconds / 3600
+  return isWest ? -decimal : decimal
+}
+
+function convertDecimalToDMS(
+  decimal: number,
+  isLatitude = true,
+): {
+  degrees: number
+  minutes: number
+  seconds: number
+  direction: string
+} {
+  const isNegative = decimal < 0
+  const abs = Math.abs(decimal)
+  const degrees = Math.floor(abs)
+  const minutesDecimal = (abs - degrees) * 60
+  const minutes = Math.floor(minutesDecimal)
+  const seconds = Math.round((minutesDecimal - minutes) * 60 * 100) / 100
+
+  let direction = "N"
+  if (isLatitude) {
+    direction = isNegative ? "S" : "N"
+  } else {
+    direction = isNegative ? "W" : "E"
+  }
+
+  return {
+    degrees,
+    minutes,
+    seconds,
+    direction,
+  }
+}
 
 export default function BirthChartPage() {
   const router = useRouter()
@@ -18,15 +55,110 @@ export default function BirthChartPage() {
     birthDate: "",
     birthTime: "",
     birthPlace: "",
-    latitude: "",
-    longitude: "",
   })
+
+  const [coordinates, setCoordinates] = useState<{
+    latitude: { degrees: number; minutes: number; seconds: number; direction: string }
+    longitude: { degrees: number; minutes: number; seconds: number; direction: string }
+    decimalLat: number
+    decimalLon: number
+  } | null>(null)
+  const [manualCoords, setManualCoords] = useState({
+    latDegrees: "12",
+    latMinutes: "57",
+    latSeconds: "0.36",
+    latDir: "S",
+    lonDegrees: "28",
+    lonMinutes: "8",
+    lonSeconds: "36.29",
+    lonDir: "E",
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [showManualInput, setShowManualInput] = useState(false)
+
+  const fetchCoordinates = async () => {
+    if (!formData.birthPlace.trim()) {
+      setError("Please enter a birth place")
+      return
+    }
+
+    setLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(formData.birthPlace)}&format=json&limit=1`,
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch coordinates")
+      }
+
+      const data = await response.json()
+
+      if (data.length === 0) {
+        setError("Location not found. Please check the spelling and try again.")
+        setCoordinates(null)
+        return
+      }
+
+      const result = data[0]
+      const decimalLat = Number.parseFloat(result.lat)
+      const decimalLon = Number.parseFloat(result.lon)
+
+      const latitude = convertDecimalToDMS(decimalLat, true)
+      const longitude = convertDecimalToDMS(decimalLon, false)
+
+      setCoordinates({
+        latitude,
+        longitude,
+        decimalLat,
+        decimalLon,
+      })
+      setError("")
+    } catch (err) {
+      setError("Unable to fetch coordinates. Please check your internet connection.")
+      console.error("[v0] Geocoding error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Store birth chart data in localStorage for now
-    localStorage.setItem("birthChartData", JSON.stringify(formData))
-    router.push("/")
+
+    if (!coordinates) {
+      setError("Please fetch coordinates for your birth place")
+      return
+    }
+
+    if (!formData.birthTime) {
+      setError("Birth time is required for accurate house placements")
+      return
+    }
+
+    try {
+      // Calculate accurate birth chart with tropical astrology and Placidus system
+      const birthChart = calculateBirthChart(
+        formData.name,
+        formData.birthDate,
+        formData.birthTime,
+        formData.birthPlace,
+        coordinates.decimalLat,
+        coordinates.decimalLon,
+      )
+
+      // Clear all previous birth chart data and store new calculation
+      localStorage.clear()
+      localStorage.setItem("birthChart", JSON.stringify(birthChart))
+
+      console.log("[v0] Birth chart calculated:", birthChart)
+      router.push("/")
+    } catch (err) {
+      console.error("[v0] Birth chart calculation error:", err)
+      setError("Error calculating birth chart. Please verify your birth information.")
+    }
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,6 +166,53 @@ export default function BirthChartPage() {
       ...prev,
       [e.target.name]: e.target.value,
     }))
+    if (e.target.name === "birthPlace") {
+      setCoordinates(null)
+      setError("")
+    }
+  }
+
+  const handleManualCoordChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setManualCoords((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }))
+  }
+
+  const applyManualCoordinates = () => {
+    try {
+      const latDeg = Number.parseFloat(manualCoords.latDegrees)
+      const latMin = Number.parseFloat(manualCoords.latMinutes)
+      const latSec = Number.parseFloat(manualCoords.latSeconds)
+      const lonDeg = Number.parseFloat(manualCoords.lonDegrees)
+      const lonMin = Number.parseFloat(manualCoords.lonMinutes)
+      const lonSec = Number.parseFloat(manualCoords.lonSeconds)
+
+      if (Number.isNaN(latDeg) || Number.isNaN(lonDeg)) {
+        setError("Please enter valid degrees for latitude and longitude")
+        return
+      }
+
+      const decimalLat = convertToDecimal(latDeg, latMin || 0, latSec || 0, manualCoords.latDir === "S")
+      const decimalLon = convertToDecimal(lonDeg, lonMin || 0, lonSec || 0, manualCoords.lonDir === "W")
+
+      const latitude = convertDecimalToDMS(decimalLat, true)
+      latitude.direction = manualCoords.latDir
+      const longitude = convertDecimalToDMS(decimalLon, false)
+      longitude.direction = manualCoords.lonDir
+
+      setCoordinates({
+        latitude,
+        longitude,
+        decimalLat,
+        decimalLon,
+      })
+      setShowManualInput(false)
+      setError("")
+    } catch (err) {
+      setError("Invalid coordinate format")
+      console.error("[v0] Manual coordinate error:", err)
+    }
   }
 
   return (
@@ -47,7 +226,9 @@ export default function BirthChartPage() {
             <Star className="w-8 h-8 text-accent" />
           </div>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-pretty">
-            {"Enter your birth details to align your tarot reading with your personal astrological transits"}
+            {
+              "Enter your birth details to align your tarot reading with your personal astrological transits (Tropical Astrology)"
+            }
           </p>
         </header>
 
@@ -115,60 +296,189 @@ export default function BirthChartPage() {
                 </div>
 
                 {/* Birth Place */}
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <Label htmlFor="birthPlace" className="text-foreground">
                     Birth Place
                   </Label>
-                  <Input
-                    id="birthPlace"
-                    name="birthPlace"
-                    type="text"
-                    placeholder="City, Country"
-                    value={formData.birthPlace}
-                    onChange={handleChange}
-                    required
-                    className="bg-background/50 border-border"
-                  />
-                </div>
+                  <div className="flex gap-2">
+                    <Input
+                      id="birthPlace"
+                      name="birthPlace"
+                      type="text"
+                      placeholder="City, Country (e.g., New York, USA)"
+                      value={formData.birthPlace}
+                      onChange={handleChange}
+                      required
+                      className="bg-background/50 border-border flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={fetchCoordinates}
+                      disabled={loading}
+                      className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    >
+                      {loading ? <Loader className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                    </Button>
+                  </div>
 
-                {/* Coordinates */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="latitude" className="text-foreground">
-                      Latitude
-                    </Label>
-                    <Input
-                      id="latitude"
-                      name="latitude"
-                      type="number"
-                      step="0.0001"
-                      placeholder="40.7128"
-                      value={formData.latitude}
-                      onChange={handleChange}
-                      required
-                      className="bg-background/50 border-border"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="longitude" className="text-foreground">
-                      Longitude
-                    </Label>
-                    <Input
-                      id="longitude"
-                      name="longitude"
-                      type="number"
-                      step="0.0001"
-                      placeholder="-74.0060"
-                      value={formData.longitude}
-                      onChange={handleChange}
-                      required
-                      className="bg-background/50 border-border"
-                    />
-                  </div>
+                  {coordinates && (
+                    <div className="p-3 rounded-lg bg-accent/10 border border-accent/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-foreground font-semibold flex items-center gap-2">
+                          <Star className="w-4 h-4 text-accent" />
+                          Coordinates Located (Tropical Astrology)
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowManualInput(!showManualInput)}
+                          className="text-xs"
+                        >
+                          {showManualInput ? "Hide" : "Adjust"}
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Latitude:{" "}
+                        <span className="text-foreground">
+                          {coordinates.latitude.degrees}° {coordinates.latitude.minutes}
+                          {`'`} {coordinates.latitude.seconds}
+                          {`"`} {coordinates.latitude.direction}
+                        </span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Longitude:{" "}
+                        <span className="text-foreground">
+                          {coordinates.longitude.degrees}° {coordinates.longitude.minutes}
+                          {`'`} {coordinates.longitude.seconds}
+                          {`"`} {coordinates.longitude.direction}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground italic">
+                        Decimal: {coordinates.decimalLat.toFixed(6)}°, {coordinates.decimalLon.toFixed(6)}°
+                      </p>
+
+                      {showManualInput && (
+                        <div className="mt-4 pt-4 border-t border-accent/20 space-y-3">
+                          <p className="text-xs text-foreground font-semibold">Adjust Coordinates</p>
+
+                          {/* Latitude */}
+                          <div className="grid grid-cols-4 gap-2 items-end">
+                            <div>
+                              <Label className="text-xs">Lat °</Label>
+                              <Input
+                                type="number"
+                                name="latDegrees"
+                                value={manualCoords.latDegrees}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Min</Label>
+                              <Input
+                                type="number"
+                                name="latMinutes"
+                                value={manualCoords.latMinutes}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Sec</Label>
+                              <Input
+                                type="number"
+                                name="latSeconds"
+                                value={manualCoords.latSeconds}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Dir</Label>
+                              <select
+                                name="latDir"
+                                value={manualCoords.latDir}
+                                onChange={handleManualCoordChange}
+                                className="bg-background/50 border border-border rounded px-2 py-1 text-xs w-full"
+                              >
+                                <option>N</option>
+                                <option>S</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Longitude */}
+                          <div className="grid grid-cols-4 gap-2 items-end">
+                            <div>
+                              <Label className="text-xs">Lon °</Label>
+                              <Input
+                                type="number"
+                                name="lonDegrees"
+                                value={manualCoords.lonDegrees}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Min</Label>
+                              <Input
+                                type="number"
+                                name="lonMinutes"
+                                value={manualCoords.lonMinutes}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Sec</Label>
+                              <Input
+                                type="number"
+                                name="lonSeconds"
+                                value={manualCoords.lonSeconds}
+                                onChange={handleManualCoordChange}
+                                placeholder="0"
+                                className="bg-background/50 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Dir</Label>
+                              <select
+                                name="lonDir"
+                                value={manualCoords.lonDir}
+                                onChange={handleManualCoordChange}
+                                className="bg-background/50 border border-border rounded px-2 py-1 text-xs w-full"
+                              >
+                                <option>E</option>
+                                <option>W</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            onClick={applyManualCoordinates}
+                            size="sm"
+                            className="w-full bg-accent text-accent-foreground hover:bg-accent/90 text-xs"
+                          >
+                            Apply Coordinates
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <p className="text-sm text-red-400">{error}</p>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {"You can find coordinates by searching your birth city on Google Maps"}
-                </p>
 
                 {/* Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 pt-4">

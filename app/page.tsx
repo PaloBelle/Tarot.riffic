@@ -29,6 +29,14 @@ export default function HomePage() {
     localStorage.setItem("currentCards", JSON.stringify(newCards))
   }
 
+  const handleClearAll = () => {
+    localStorage.clear()
+    console.log("[v0] All birth chart data cleared from localStorage")
+    setHasStarted(false)
+    setCards(getRandomCards(3))
+    setRevealedCards([false, false, false])
+  }
+
   const allRevealed = revealedCards.every((r) => r)
 
   return (
@@ -67,12 +75,21 @@ export default function HomePage() {
                     <Sparkles className="w-4 h-4 mr-2" />
                     Draw Cards
                   </Button>
-                  <Link href="/birth-chart">
+                  <Link href="/chart">
                     <Button size="lg" variant="outline">
                       <Moon className="w-4 h-4 mr-2" />
-                      Enter Birth Chart
+                      View Birth Chart
                     </Button>
                   </Link>
+                  <Link href="/birth-chart">
+                    <Button size="lg" variant="outline">
+                      <Star className="w-4 h-4 mr-2" />
+                      Create Birth Chart
+                    </Button>
+                  </Link>
+                  <Button size="lg" variant="destructive" onClick={handleClearAll}>
+                    Clear All Data
+                  </Button>
                 </div>
               </div>
             </div>
