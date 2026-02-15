@@ -17,7 +17,10 @@ function convertToDecimal(degrees: number, minutes = 0, seconds = 0, isWest = fa
   return isWest ? -decimal : decimal
 }
 
-function convertDecimalToDMS(decimal: number): {
+function convertDecimalToDMS(
+  decimal: number,
+  isLatitude = true,
+): {
   degrees: number
   minutes: number
   seconds: number
@@ -30,11 +33,18 @@ function convertDecimalToDMS(decimal: number): {
   const minutes = Math.floor(minutesDecimal)
   const seconds = Math.round((minutesDecimal - minutes) * 60 * 100) / 100
 
+  let direction = "N"
+  if (isLatitude) {
+    direction = isNegative ? "S" : "N"
+  } else {
+    direction = isNegative ? "W" : "E"
+  }
+
   return {
     degrees,
     minutes,
     seconds,
-    direction: isNegative ? (decimal < 0 ? "S" : "W") : "N",
+    direction,
   }
 }
 
@@ -54,13 +64,13 @@ export default function BirthChartPage() {
     decimalLon: number
   } | null>(null)
   const [manualCoords, setManualCoords] = useState({
-    latDegrees: "",
-    latMinutes: "",
-    latSeconds: "",
-    latDir: "N",
-    lonDegrees: "",
-    lonMinutes: "",
-    lonSeconds: "",
+    latDegrees: "12",
+    latMinutes: "57",
+    latSeconds: "0.36",
+    latDir: "S",
+    lonDegrees: "28",
+    lonMinutes: "8",
+    lonSeconds: "36.29",
     lonDir: "E",
   })
   const [loading, setLoading] = useState(false)
@@ -97,11 +107,8 @@ export default function BirthChartPage() {
       const decimalLat = Number.parseFloat(result.lat)
       const decimalLon = Number.parseFloat(result.lon)
 
-      const latitude = convertDecimalToDMS(decimalLat)
-      const longitude = convertDecimalToDMS(decimalLon)
-
-      // Adjust direction for longitude
-      longitude.direction = decimalLon < 0 ? "W" : "E"
+      const latitude = convertDecimalToDMS(decimalLat, true)
+      const longitude = convertDecimalToDMS(decimalLon, false)
 
       setCoordinates({
         latitude,
@@ -189,9 +196,9 @@ export default function BirthChartPage() {
       const decimalLat = convertToDecimal(latDeg, latMin || 0, latSec || 0, manualCoords.latDir === "S")
       const decimalLon = convertToDecimal(lonDeg, lonMin || 0, lonSec || 0, manualCoords.lonDir === "W")
 
-      const latitude = convertDecimalToDMS(decimalLat)
+      const latitude = convertDecimalToDMS(decimalLat, true)
       latitude.direction = manualCoords.latDir
-      const longitude = convertDecimalToDMS(decimalLon)
+      const longitude = convertDecimalToDMS(decimalLon, false)
       longitude.direction = manualCoords.lonDir
 
       setCoordinates({
